@@ -328,6 +328,143 @@ func SampleVarianceFloat64(values []float64) float64 {
 	return sum / float64(len(values))
 }
 
+// A uniform sample using Vitter's Algorithm R.
+//
+// <http://www.cs.umd.edu/~samir/498/vitter.pdf>
+type UniformSampleFloat64 struct {
+	count         int64
+	mutex         sync.Mutex
+	reservoirSize int
+	values        []float64
+}
+
+// NewUniformSampleFloat64 constructs a new uniform sample with the given reservoir
+// size.
+func NewUniformSampleFloat64(reservoirSize int) SampleFloat64 {
+	return &UniformSampleFloat64{
+		reservoirSize: reservoirSize,
+		values:        make([]float64, 0, reservoirSize),
+	}
+}
+
+// Clear clears all samples.
+func (s *UniformSampleFloat64) Clear() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.count = 0
+	s.values = make([]float64, 0, s.reservoirSize)
+}
+
+// Count returns the number of samples recorded, which may exceed the
+// reservoir size.
+func (s *UniformSampleFloat64) Count() int64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.count
+}
+
+// Max returns the maximum value in the sample, which may not be the maximum
+// value ever to be part of the sample.
+func (s *UniformSampleFloat64) Max() float64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return SampleMaxFloat64(s.values)
+}
+
+// Mean returns the mean of the values in the sample.
+func (s *UniformSampleFloat64) Mean() float64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return SampleMeanFloat64(s.values)
+}
+
+// Min returns the minimum value in the sample, which may not be the minimum
+// value ever to be part of the sample.
+func (s *UniformSampleFloat64) Min() float64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return SampleMinFloat64(s.values)
+}
+
+// Percentile returns an arbitrary percentile of values in the sample.
+func (s *UniformSampleFloat64) Percentile(p float64) float64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return SamplePercentileFloat64(s.values, p)
+}
+
+// Percentiles returns a slice of arbitrary percentiles of values in the
+// sample.
+func (s *UniformSampleFloat64) Percentiles(ps []float64) []float64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return SamplePercentilesFloat64(s.values, ps)
+}
+
+// Size returns the size of the sample, which is at most the reservoir size.
+func (s *UniformSampleFloat64) Size() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return len(s.values)
+}
+
+// Snapshot returns a read-only copy of the sample.
+func (s *UniformSampleFloat64) Snapshot() SampleFloat64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	values := make([]float64, len(s.values))
+	copy(values, s.values)
+	return &SampleSnapshotFloat64{
+		count:  s.count,
+		values: values,
+	}
+}
+
+// StdDev returns the standard deviation of the values in the sample.
+func (s *UniformSampleFloat64) StdDev() float64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return SampleStdDevFloat64(s.values)
+}
+
+// Sum returns the sum of the values in the sample.
+func (s *UniformSampleFloat64) Sum() float64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return SampleSumFloat64(s.values)
+}
+
+// Update samples a new value.
+func (s *UniformSampleFloat64) Update(v float64) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.count++
+	if len(s.values) < s.reservoirSize {
+		s.values = append(s.values, v)
+	} else {
+		r := rand.Int63n(s.count)
+		if r < int64(len(s.values)) {
+			s.values[int(r)] = v
+		}
+	}
+}
+
+// Values returns a copy of the values in the sample.
+func (s *UniformSampleFloat64) Values() []float64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	values := make([]float64, len(s.values))
+	copy(values, s.values)
+	return values
+}
+
+// Variance returns the variance of the values in the sample.
+func (s *UniformSampleFloat64) Variance() float64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return SampleVarianceFloat64(s.values)
+}
+
 // expDecaySampleFloat64 represents an individual sample in a heap.
 type expDecaySampleFloat64 struct {
 	k float64
